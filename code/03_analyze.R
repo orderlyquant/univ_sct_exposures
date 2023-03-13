@@ -1,6 +1,7 @@
 source("code/00_dependencies.R")
 
-board <- pins::board_folder("~/R/000_pins/cam-stock")
+# board <- pins::board_folder("~/R/000_pins/cam-stock")
+board <- pins::board_folder("/Volumes/Users/BFarr/000_pins/cam-stock/")
 
 pins::pin_list(board)
 
@@ -11,20 +12,6 @@ acct_name  <- "Attribution ACTM for Large Cap"
 bench_name <- "Russell 1000 Growth"
 sector_name <- "Information Technology"
 
-
-acct_tbl <- wts_tbl |>
-  filter(acct == acct_name)
-
-bench_tbl <- wts_tbl |>
-  filter(acct == bench_name)
-
-
-tec_names <- union(
-  acct_tbl |> filter(sector == sector_name) |> pull(name),
-  bench_tbl |> filter(sector == sector_name) |> pull(name)
-)
-
-
 # styles <- frsAttr::axioma_factor_levels_tbl |>
 #   filter(factor_type == "Style")
 
@@ -34,23 +21,49 @@ styles <- c(
   "Market Sensitivity", "Medium-Term Momentum"
 )
 
-
-all_styles_exp_tbl <- exp_tbl |>
-  filter(factor %in% styles) |> 
-  mutate(factor = factor(factor, styles))
-
-tec_styles_exp_tbl <- all_styles_exp_tbl |>
-  filter(security %in% tec_names)
-
-tec_styles_exp_tbl |>
-  semi_join(
-    acct_tbl, by = c("security" = "name")
+prep_sector_data <- function(w_tbl, e_tbl, acct_name, bench_name, sct, styles) {
+  
+  acct_tbl  <- w_tbl |> filter(acct == acct_name)  |> filter(sector == sct)
+  bench_tbl <- w_tbl |> filter(acct == bench_name) |> filter(sector == sct)
+  
+  sector_names <- union(
+    acct_tbl  |> filter(sector == sct) |> pull(name),
+    bench_tbl |> filter(sector == sct) |> pull(name)
+  ) |> sort()
+  
+  styles_exp_tbl <- e_tbl |>
+    filter(factor %in% styles) |> 
+    mutate(factor = factor(factor, styles))
+  
+  sct_styles_exp_tbl <- styles_exp_tbl |>
+    filter(security %in% sector_names)
+  
+  return(
+    list(
+      acct_hld = acct_tbl,
+      bench_hld = bench_tbl,
+      sector_names = sector_names,
+      sector_exposures = sct_styles_exp_tbl
+    )
   )
+  
+}
+
+jj <- prep_sector_data(
+  w_tbl = wts_tbl, e_tbl = exp_tbl,
+  acct_name = acct_name, bench_name = bench_name,
+  sct = sector_name,
+  styles = styles
+)
+
+
 
 
 # graphical representation ------------------------------------------------
 
 density_adj <- 1.5
+
+
 
 all_styles_exp_tbl |>
   ggplot(
