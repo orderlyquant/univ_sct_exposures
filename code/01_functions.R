@@ -35,8 +35,8 @@ prep_exposure_data <- function(w_tbl, e_tbl, acct_name, bench_name, styles) {
 gen_key_exposures_plot <- function(e_data, sct, density_adj = 1.5) {
   
   type_codes <- c(
-    glue("{lu_port_code(e_data$bench)}"),
-    glue("{lu_port_code(e_data$acct)}")
+    glue("{lu_sector_code(sct)}: {lu_port_code(e_data$bench)}"),
+    glue("{lu_sector_code(sct)}: {lu_port_code(e_data$acct)}")
   )
   
   sector_data <- bind_rows(
@@ -91,13 +91,36 @@ gen_key_exposures_plot <- function(e_data, sct, density_adj = 1.5) {
 gen_summary_tbl <- function(e_data, sct) {
   
   type_codes <- c(
-    glue("{lu_port_code(e_data$acct)} - {lu_sector_code(sct)}"),
-    glue("{lu_port_code(e_data$bench)} - {lu_sector_code(sct)}"),
-    glue("{lu_port_code(e_data$bench)}")
+    glue("{lu_port_code(e_data$acct)}"),
+    glue("{lu_port_code(e_data$bench)}"),
+    glue("{lu_port_code(e_data$acct)}: {lu_sector_code(sct)}"),
+    glue("{lu_port_code(e_data$bench)}: {lu_sector_code(sct)}")
   )
   
   
   bind_rows(
+    e_data$acct_data |>
+      group_by(factor) |>
+      summarize(
+        # avg = mean(exposure),
+        # med = median(exposure),
+        wtd_exp = sum(weight * exposure) / sum(weight)
+      ) |> 
+      mutate(
+        type = type_codes[1]
+      ),
+    
+    e_data$bench_data |>
+      group_by(factor) |>
+      summarize(
+        # avg = mean(exposure),
+        # med = median(exposure),
+        wtd_exp = sum(weight * exposure) / sum(weight)
+      ) |> 
+      mutate(
+        type = type_codes[2]
+      ),
+    
     e_data$acct_data |> 
       filter(sector == sct) |> 
       group_by(factor) |> 
@@ -107,7 +130,7 @@ gen_summary_tbl <- function(e_data, sct) {
         wtd_exp = sum(weight * exposure) / sum(weight)
       ) |> 
       mutate(
-        type = type_codes[1]
+        type = type_codes[3]
       ),
     
     e_data$bench_data |>
@@ -119,18 +142,7 @@ gen_summary_tbl <- function(e_data, sct) {
         wtd_exp = sum(weight * exposure) / sum(weight)
       ) |> 
       mutate(
-        type = type_codes[2]
-      ),
-    
-    e_data$bench_data |>
-      group_by(factor) |>
-      summarize(
-        # avg = mean(exposure),
-        # med = median(exposure),
-        wtd_exp = sum(weight * exposure) / sum(weight)
-      ) |> 
-      mutate(
-        type = type_codes[3]
+        type = type_codes[4]
       )
   ) |> 
     mutate(type = factor(type, type_codes)) |> 
