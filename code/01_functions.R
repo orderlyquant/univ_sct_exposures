@@ -1,3 +1,17 @@
+gen_port_set <- function(w_tbl, e_tbl, port) {
+  w_tbl |>
+    filter(acct == port) |>
+    select(ticker, name, sector, weight) |>
+    left_join(
+      e_tbl |>
+        rename(name = security) |>
+        rename(exposure = value) |>
+        select(name, factor, exposure),
+      by = "name",
+      multiple = "all"
+    )
+}
+
 prep_exposure_data <- function(w_tbl, e_tbl, acct_name, bench_name, styles) {
   
   acct_data  <- gen_port_set(w_tbl, e_tbl, acct_name) |> 
@@ -20,20 +34,23 @@ prep_exposure_data <- function(w_tbl, e_tbl, acct_name, bench_name, styles) {
 
 gen_key_exposures_plot <- function(e_data, sct, density_adj = 1.5) {
   
-  # univ_exp <- e_data$univ_exposures
+  type_codes <- c(
+    glue("{lu_port_code(e_data$bench)}"),
+    glue("{lu_port_code(e_data$acct)}")
+  )
   
   sector_data <- bind_rows(
     e_data$acct_data |>
       filter(sector == sct) |> 
-      mutate(type = e_data$acct) |>
+      mutate(type = type_codes[2]) |>
       select(type, name, factor, exposure),
     e_data$bench_data |>
       filter(sector == sct) |> 
-      mutate(type = e_data$bench) |>
+      mutate(type = type_codes[1]) |>
       select(type, name, factor, exposure)
   ) |> 
     mutate(
-      type = factor(type, c(e_data$bench, e_data$acct))
+      type = factor(type, type_codes)
     )
   
   e_data$bench_data |> 
@@ -41,13 +58,13 @@ gen_key_exposures_plot <- function(e_data, sct, density_adj = 1.5) {
       aes(x = exposure)
     ) +
     # geom_vline(xintercept = 0, color = "gray40", linewidth = 0.7) +
-    geom_density(color = NA, fill = "gray80", adjust = density_adj) +
+    geom_density(color = NA, fill = "gray60", adjust = density_adj) +
     geom_density(
       data = sector_data,
       aes(x = exposure, fill = type),
       adjust = density_adj,
       color = NA,
-      alpha = 0.75
+      alpha = 0.7
     ) +
     facet_wrap(~factor, dir = "v", nrow = 2) +
     # scale_x_continuous(limits = c(-3, 3)) +
@@ -61,52 +78,148 @@ gen_key_exposures_plot <- function(e_data, sct, density_adj = 1.5) {
     theme_minimal_grid() +
     theme(
       axis.text.y = element_blank(),
-      legend.position = "bottom"
+      legend.position = "bottom",
+      panel.spacing = unit(2, "lines")
     ) +
-    scale_fill_oq()
+    # scale_fill_oq()
+    scale_fill_manual(
+      values = c("dodgerblue", "orange")
+    )
   
 }
 
 gen_summary_tbl <- function(e_data, sct) {
   
-  summary_tbl <- bind_rows(
-    e_data$bench_data |> 
-      group_by(factor) |>
-      summarize(
-        avg = mean(exposure),
-        med = median(exposure)
-      ) |>
-      mutate(type = "Univ"),
-    e_data$bench_data |> 
-      filter(sector == sct) |>
-      group_by(factor) |>
-      summarize(
-        avg = mean(exposure),
-        med = median(exposure)
-      ) |>
-      mutate(type = e_data$bench),
+  type_codes <- c(
+    glue("{lu_port_code(e_data$acct)} - {lu_sector_code(sct)}"),
+    glue("{lu_port_code(e_data$bench)} - {lu_sector_code(sct)}"),
+    glue("{lu_port_code(e_data$bench)}")
+  )
+  
+  
+  bind_rows(
     e_data$acct_data |> 
+      filter(sector == sct) |> 
+      group_by(factor) |> 
+      summarize(
+        # avg = mean(exposure),
+        # med = median(exposure),
+        wtd_exp = sum(weight * exposure) / sum(weight)
+      ) |> 
+      mutate(
+        type = type_codes[1]
+      ),
+    
+    e_data$bench_data |>
       filter(sector == sct) |>
       group_by(factor) |>
       summarize(
-        avg = mean(exposure),
-        med = median(exposure)
-      ) |>
-      mutate(type = e_data$acct)
-  ) |> 
-    mutate(
-      type = factor(
-        type,
-        c("Univ", e_data$bench, e_data$acct)
+        # avg = mean(exposure),
+        # med = median(exposure),
+        wtd_exp = sum(weight * exposure) / sum(weight)
+      ) |> 
+      mutate(
+        type = type_codes[2]
+      ),
+    
+    e_data$bench_data |>
+      group_by(factor) |>
+      summarize(
+        # avg = mean(exposure),
+        # med = median(exposure),
+        wtd_exp = sum(weight * exposure) / sum(weight)
+      ) |> 
+      mutate(
+        type = type_codes[3]
       )
+  ) |> 
+    mutate(type = factor(type, type_codes)) |> 
+    pivot_wider(
+      names_from = type,
+      values_from = wtd_exp
     )
   
-  summary_tbl |>
-    select(-med) |>
-    pivot_wider(names_from = type, values_from = avg)
+}
+
+gen_sector_security_tbl <- function(e_data, e_tbl, sct) {
   
-  # summary_tbl |>
-  #   select(-avg) |>
-  #   pivot_wider(names_from = type, values_from = med)
+  all_sector_security_tbl <- bind_rows(
+    e_data$acct_data |> 
+      filter(sector == sct) |> 
+      group_by(name) |> 
+      summarize(
+        weight = first(weight),
+        type = "acct_wt"
+      ),
+    e_data$bench_data |> 
+      filter(sector == sct) |> 
+      group_by(name) |> 
+      summarize(
+        weight = first(weight),
+        type = "bench_wt"
+      )
+  ) |> 
+    pivot_wider(
+      names_from = type,
+      values_from = weight
+    )
+  
+  all_security_exposure_tbl <- e_tbl |>
+    rename(name = security) |> 
+    filter(name %in% all_sector_security_tbl$name) |> 
+    filter(factor %in% styles) |> 
+    select(name, factor, value) |> 
+    pivot_wider(
+      names_from = factor,
+      values_from = value
+    )
+  
+  all_sector_security_tbl |>
+    left_join(
+      all_security_exposure_tbl, by = "name"
+    ) |> 
+    arrange(desc(acct_wt))
+  
+}
+
+
+lu_port_code <- function(port_name) {
+  
+  lu_tbl <- tibble::tribble(
+    ~full_name, ~abbv_name,
+    "Attribution ACTM for Large Cap",      "LCG",
+    "Attribution ACTM for SMID Cap",     "SMID",
+    "Russell 1000 Growth",   "R1000G",
+    "Russell 2500 Growth",   "R2500G",
+    "iShares Core S&P 500 ETF",  "S&P 500"
+  )
+  
+  lu_tbl |>
+    filter(full_name == port_name) |> 
+    pull(abbv_name)
+  
+}
+
+lu_sector_code <- function(sector_name) {
+  
+  lu_tbl <- tibble::tribble(
+    ~full_name, ~abbv_name,
+    "Communication Services",      "COM",
+    "Consumer Discretionary",      "CDS",
+    "Consumer Staples",      "CST",
+    "Energy",      "ENE",
+    "Financials",      "FIN",
+    "Health Care",      "HEA",
+    "Industrials",      "IND",
+    "Information Technology",      "TEC",
+    "Materials",      "MAT",
+    "Real Estate",      "REA",
+    "Utilities",      "UTL"
+  )
+  
+  
+  lu_tbl |>
+    filter(full_name == sector_name) |> 
+    pull(abbv_name)
   
 }
