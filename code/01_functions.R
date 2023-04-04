@@ -35,8 +35,8 @@ prep_exposure_data <- function(w_tbl, e_tbl, acct_name, bench_name, styles) {
 gen_key_exposures_plot <- function(e_data, sct, density_adj = 1.5) {
   
   type_codes <- c(
-    glue("{lu_sector_code(sct)}: {lu_port_code(e_data$bench)}"),
-    glue("{lu_sector_code(sct)}: {lu_port_code(e_data$acct)}")
+    glue("{lu_port_code(e_data$bench)}: {lu_sector_code(sct)}"),
+    glue("{lu_port_code(e_data$acct)}: {lu_sector_code(sct)}")
   )
   
   sector_data <- bind_rows(
@@ -200,8 +200,10 @@ lu_port_code <- function(port_name) {
   lu_tbl <- tibble::tribble(
     ~full_name, ~abbv_name,
     "Attribution ACTM for Large Cap",      "LCG",
+    "Attribution ACTM for Multicap",      "MULTI",
     "Attribution ACTM for SMID Cap",     "SMID",
     "Russell 1000 Growth",   "R1000G",
+    "Russell 3000 Growth",   "R3000G",
     "Russell 2500 Growth",   "R2500G",
     "iShares Core S&P 500 ETF",  "S&P 500"
   )
